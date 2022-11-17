@@ -2,10 +2,8 @@ package Web::Plugins;
 
 use strict;
 use warnings;
-use Capture::Tiny qw(capture);
+use PluginsDirs;
 
-push @INC, split /\n/, capture {
-    system qw(find /app/src/plugins -name lib);
-};
+grep { require $_ } PluginsDirs->autoload_files;
 
 1;

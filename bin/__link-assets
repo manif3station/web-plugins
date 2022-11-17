@@ -1,0 +1,91 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin '$Bin';
+
+my $working_dir = "$Bin/..";
+
+chdir $working_dir;
+
+my $plugins_dir = "src/plugins";
+
+sub linkup {
+    my ( $plugin, @dirs ) = @_;
+
+    my $plugin_dir = "$plugins_dir/$plugin";
+
+    foreach my $dir (@dirs) {
+        my $container_dir      = "src/public/$dir";
+        my $asset_dir_for_read = "$plugin_dir/$container_dir";
+
+        next if !-d $asset_dir_for_read;
+
+        unlink $container_dir if -l $container_dir;
+
+        mkdir $container_dir if !-d $container_dir;
+
+        my $asset_dir_for_link = "../../plugins/$plugin/$container_dir";
+
+        opendir( my $dh, $asset_dir_for_read );
+
+        foreach my $filename ( readdir($dh) ) {
+            next if $filename =~ m/^\.{1,2}$/;
+            next if $filename eq '.placeholder';
+
+            my $asset_path     = "$asset_dir_for_link/$filename";
+            my $container_path = "$container_dir/$filename";
+
+            unlink $container_path if -l $container_path;
+
+            next if -e $container_path;
+
+            symlink $asset_path, $container_path;
+        }
+
+        closedir($dh);
+    }
+
+    return @dirs;
+}
+
+sub cleanup {
+    my (@dirs) = @_
+        or return;
+
+    foreach my $dir (@dirs) {
+        my $container_dir = "src/public/$dir";
+
+        opendir( my $dh, $container_dir );
+
+        foreach my $filename ( readdir($dh) ) {
+            next if $filename =~ m/^\.{1,2}$/;
+
+            my $container_path = "$container_dir/$filename";
+
+            unlink $container_path if !-e $container_path;
+        }
+    }
+}
+
+sub main {
+    my ( $plugin, @dirs ) = @_;
+
+    exit if !$plugin;
+
+    die "Plugin '$plugin' is not found." if !-d "$plugins_dir/$plugin";
+
+    @dirs = qw(images css js files fonts) if !@dirs;
+
+    if ( -f "$plugins_dir/$plugin/src/public/favicon.ico" ) {
+        unlink "src/public/favicon.ico";
+        symlink "../plugins/$plugin/src/public/favicon.ico",
+            "src/public/favicon.ico";
+    }
+
+    cleanup linkup $plugin, @dirs;
+
+    exit;
+}
+
+main(@ARGV);

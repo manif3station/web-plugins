@@ -1,0 +1,202 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin '$Bin';
+
+my $plugins_dir = 'src/plugins';
+my $working_dir = "$Bin/..";
+my @folders     = qw(views bin config public/js public/css public/images public/files);
+my $uname       = qx{uname -a};
+my $personal_ssh_key = "$ENV{HOME}/bin/mf-ssh";
+
+sub plugins {
+    my ($do) = @_;
+
+    opendir( my $dir, $plugins_dir );
+
+    my @plugins = grep { $_ ne '.' && $_ ne '..' } readdir $dir;
+
+    if ($do) {
+        foreach my $plugin (@plugins) {
+            $do->($plugin);
+        }
+    }
+
+    return @plugins;
+}
+
+sub remove_broken_links {
+    my @broken_links = ();
+
+    foreach my $dir ( 'bin', map { "src/$_" } @folders ) {
+        foreach my $link ( map { "$dir/$_" } split /\n/, qx{ls $dir} ) {
+            push @broken_links, $link if !-f $link && !-d $link;
+        }
+    }
+
+    system rm => @broken_links if @broken_links;
+}
+
+sub post_install {
+    my ($plugin) = @_;
+
+    # Cli scripts
+    #
+    {
+        my $dir = "$plugins_dir/$plugin/bin";
+        if ( -d $dir ) {
+            foreach my $script ( split /\n/, qx{find $dir -type f} ) {
+                next if !-x $script;
+                next if $script =~ m/autoload\.pl$/;
+                next if $script =~ m/post-install\.sh$/;
+                my ($file) = ( $script =~ m/.*\/(.*)/ );
+                my $link = "bin/$file";
+                system rm => $link if -l $link;
+                symlink "../$script", $link;
+                system qw(chmod -R +x ), $link;
+            }
+        }
+    }
+
+    # Links
+    #
+    foreach my $folder (@folders) {
+        my $dir = "$plugins_dir/$plugin/src/$folder";
+        next if !-d $dir;
+        $dir =~ s/^src\///;
+        my $source = ( '../' x ( split /\//, $folder ) ) . $dir;
+        my $link   = "src/$folder/$plugin";
+        system rm => $link if -l $link;
+        symlink $source, $link;
+    }
+
+    remove_broken_links;
+
+    my $post_install_file = "$plugins_dir/$plugin/bin/post-install.sh";
+
+    if ( -f $post_install_file && -x $post_install_file ) {
+        system $post_install_file;
+    }
+}
+
+sub main {
+    my ( $cmd, @args ) = @_ or exit;
+
+    if ( $uname =~ m/arm64/ && -f 'bin/mvu' ) {
+        system qw( mvu docker --enable arm );
+    }
+
+    chdir $working_dir;
+
+    if ( $cmd eq 'cd' ) {
+        my ($plugin) = @args;
+
+        my $want_content = 0;
+
+        if ($plugin && $plugin eq '--content') {
+            $want_content = 1;
+            $plugin = '';
+        }
+
+        if ( !$plugin ) {
+            ($plugin) = ( $ENV{PWD} =~ m{([^\/]+)$} );
+        }
+
+        if ($want_content) {
+            $plugin =~s/-website$/-content/;
+        }
+
+        my $dir = "$plugins_dir/$plugin";
+
+        die "Plugin is not found." if !-d $dir;
+
+        system qq{cd $dir; bash};
+
+        exit;
+    }
+    elsif ( $cmd eq 'ls' ) {
+        exec ls => -l => $plugins_dir;
+    }
+    elsif ( $cmd eq 'install' ) {
+        my ( $git, $branch, %args ) = @args or exit;
+
+        my $name = $args{'--name'};
+
+        if ( $git =~ m/^[\w\-\_]+$/ ) {
+            $name //= $git;
+
+            if ( -f $personal_ssh_key ) {
+                $git  = "git\@github.mf:manif3station/$git.git";
+            }
+            else {
+                $git = "https://github.com/manif3station/$git.git";
+            }
+        }
+        elsif ( -f $personal_ssh_key && $git =~ m/\@github.com/ ) {
+            $git =~ s/github\.com/github.mf/;
+        }
+
+        if ( !$name && $git =~ m/([^\/]+)\.git$/ ) {
+            $name = $1;
+        }
+
+        if (!$name) {
+            die "Couldn't determine a plugin name '$git'\n";
+        }
+
+        my $dir = "$plugins_dir/$name";
+
+        if ( !-d $dir ) {
+            print "Install plugin $name ...\n";
+            $branch //= 'master';
+            system qw(git submodule add --force --name), $name,
+              -b => $branch,
+              $git, $dir;
+            post_install($name);
+        }
+
+        exit;
+    }
+    elsif ( $cmd eq 'delete' ) {
+        my ($name)     = @args or exit;
+        my $plugin_dir = "$plugins_dir/$name";
+        my $git_dir    = ".git/modules/$name";
+        my $mod_file   = ".gitmodules";
+
+        system rm => -fr => $plugin_dir, $git_dir;
+
+        my $updated_mod_file;
+
+        {
+            open my $new, '>', \$updated_mod_file;
+            open my $old, '<', $mod_file;
+            while ( my $line = <$old> ) {
+                next if $line =~ m/submodule "$name"/;
+                next if $line =~ m{^\t(url|path) = .+/$name$};
+                print $new $line;
+            }
+        }
+
+        {
+            open my $fh, '>', $mod_file;
+            print $fh $updated_mod_file;
+        }
+
+        remove_broken_links;
+
+        exit;
+    }
+    elsif ( $cmd eq 'update' ) {
+        system qw(git submodule update --remote --init --recursive);
+        plugins( \&post_install );
+    }
+    elsif ( $cmd eq 'link-assets' ) {
+        exec "bin/__link-assets", @args;
+    }
+    else {
+        die "Unknown command '$cmd'\n";
+    }
+}
+
+main(@ARGV);
