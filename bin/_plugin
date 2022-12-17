@@ -6,8 +6,9 @@ use FindBin '$Bin';
 
 my $plugins_dir = 'src/plugins';
 my $working_dir = "$Bin/..";
-my @folders     = qw(views bin config public/js public/css public/images public/files);
-my $uname       = qx{uname -a};
+my @folders
+    = qw(views bin config public/js public/css public/images public/files);
+my $uname            = qx{uname -a};
 my $personal_ssh_key = "$ENV{HOME}/bin/mf-ssh";
 
 sub plugins {
@@ -29,8 +30,9 @@ sub plugins {
 sub remove_broken_links {
     my @broken_links = ();
 
-    foreach my $dir ( 'bin', map { "src/$_" } @folders ) {
-        foreach my $link ( map { "$dir/$_" } split /\n/, qx{ls $dir} ) {
+    foreach my $dir ( 'bin', map {"src/$_"} @folders ) {
+        next if !-d $dir;
+        foreach my $link ( map {"$dir/$_"} split /\n/, qx{ls $dir} ) {
             push @broken_links, $link if !-f $link && !-d $link;
         }
     }
@@ -94,9 +96,9 @@ sub main {
 
         my $want_content = 0;
 
-        if ($plugin && $plugin eq '--content') {
+        if ( $plugin && $plugin eq '--content' ) {
             $want_content = 1;
-            $plugin = '';
+            $plugin       = '';
         }
 
         if ( !$plugin ) {
@@ -104,7 +106,7 @@ sub main {
         }
 
         if ($want_content) {
-            $plugin =~s/-website$/-content/;
+            $plugin =~ s/-website$/-content/;
         }
 
         my $dir = "$plugins_dir/$plugin";
@@ -127,7 +129,7 @@ sub main {
             $name //= $git;
 
             if ( -f $personal_ssh_key ) {
-                $git  = "git\@github.mf:manif3station/$git.git";
+                $git = "git\@github.mf:manif3station/$git.git";
             }
             else {
                 $git = "https://github.com/manif3station/$git.git";
@@ -141,7 +143,7 @@ sub main {
             $name = $1;
         }
 
-        if (!$name) {
+        if ( !$name ) {
             die "Couldn't determine a plugin name '$git'\n";
         }
 
@@ -151,8 +153,8 @@ sub main {
             print "Install plugin $name ...\n";
             $branch //= 'master';
             system qw(git submodule add --force --name), $name,
-              -b => $branch,
-              $git, $dir;
+                -b => $branch,
+                $git, $dir;
             post_install($name);
         }
 
