@@ -152,6 +152,7 @@ sub main {
 
         if ( !-d $dir ) {
             print "Install plugin $name ...\n";
+            print "Checking out $git ...\n";
             $branch //= 'master';
             system qw(git submodule add --force --name), $name,
                 -b => $branch,
