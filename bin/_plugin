@@ -11,6 +11,7 @@ my @folders
     = qw(views bin config public/js public/css public/images public/files);
 my $uname            = qx{uname -a};
 my $personal_ssh_key = "$ENV{HOME}/bin/mf-ssh";
+my $original_version  = do { open my $fh, '<', $0; local $/; <$fh> };
 
 sub plugins {
     my ($do) = @_;
@@ -193,6 +194,10 @@ sub main {
     }
     elsif ( $cmd eq 'update' ) {
         system qw(git submodule update --remote --init --recursive);
+        my $current_version = do { open my $fh, '<', $0; local $/; <$fh> };
+        if ($current_version ne $original_version) {
+            exec qw( mvu plugin update );
+        }
         plugins( \&post_install );
     }
     elsif ( $cmd eq 'link-assets' ) {
