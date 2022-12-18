@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use FindBin '$Bin';
+use File::Path 'mkpath';
 
 my $plugins_dir = 'src/plugins';
 my $working_dir = "$Bin/..";
@@ -31,7 +32,7 @@ sub remove_broken_links {
     my @broken_links = ();
 
     foreach my $dir ( 'bin', map {"src/$_"} @folders ) {
-        next if !-d $dir;
+        mkpath $dir if !-d $dir;
         foreach my $link ( map {"$dir/$_"} split /\n/, qx{ls $dir} ) {
             push @broken_links, $link if !-f $link && !-d $link;
         }
