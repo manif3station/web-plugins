@@ -94,26 +94,23 @@ sub main {
     chdir $working_dir;
 
     if ( $cmd eq 'cd' ) {
-        my ($plugin) = @args;
-
-        my $want_content = 0;
-
-        if ( $plugin && $plugin eq '--content' ) {
-            $want_content = 1;
-            $plugin       = '';
-        }
-
-        if ( !$plugin ) {
-            ($plugin) = ( $ENV{PWD} =~ m{([^\/]+)$} );
-        }
-
-        if ($want_content) {
-            $plugin =~ s/-website$/-content/;
-        }
+        my ($plugin, @search) = @args;
 
         my $dir = "$plugins_dir/$plugin";
 
-        die "Plugin is not found." if !-d $dir;
+        if (!-d $dir) {
+            my $search_str = join '.*', ($plugin, @search);
+            opendir(my $dh, $plugins_dir);
+            foreach my $p(readdir($dh)) {
+                next if $p eq '.' || $p eq '..';
+                if ( $p =~ m/$search_str/ ) {
+                    $dir = "$plugins_dir/$p";
+                    last;
+                }
+            }
+        }
+
+        die "Plugin '$plugin' is not found." if !-d $dir;
 
         system qq{cd $dir; bash};
 
