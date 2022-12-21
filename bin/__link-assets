@@ -77,10 +77,11 @@ sub main {
 
     @dirs = qw(images css js files fonts) if !@dirs;
 
-    if ( -f "$plugins_dir/$plugin/src/public/favicon.ico" ) {
-        unlink "src/public/favicon.ico";
-        symlink "../plugins/$plugin/src/public/favicon.ico",
-            "src/public/favicon.ico";
+    foreach my $file(qw(favicon.ico browserconfig.xml)) {
+        if ( -f "$plugins_dir/$plugin/src/public/$file" ) {
+            unlink "src/public/$file";
+            symlink "../plugins/$plugin/src/public/$file", "src/public/$file";
+        }
     }
 
     cleanup linkup $plugin, @dirs;
